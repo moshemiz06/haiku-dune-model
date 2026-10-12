@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Arrakis: north polar region (Dune, Part One)</title>
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #1d1410; color: #f2e4cc;
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif; }
+  canvas { position: absolute; top: 0; left: 0; display: block; }
+  #hud { position: absolute; top: 18px; left: 18px; max-width: 360px; pointer-events: none; }
+  #hud h1 { margin: 0 0 6px; font-size: 18px; font-weight: 600; letter-spacing: 0.02em; }
+  #hud p { margin: 0; font-size: 13px; line-height: 1.5; opacity: 0.85; }
+  #controls { position: absolute; left: 18px; bottom: 18px; font-size: 13px; }
+  #controls label { margin-right: 16px; cursor: pointer; user-select: none; }
+  .tag { position: absolute; transform: translate(-50%, -100%); padding: 4px 8px; border-radius: 4px;
+    background: rgba(20, 12, 8, 0.78); border: 1px solid rgba(255, 220, 160, 0.35);
+    font-size: 13px; white-space: nowrap; pointer-events: none; }
+  .tag small { display: block; font-size: 11px; opacity: 0.75; margin-top: 2px; }
+  .tag.off { display: none; }
+</style>
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.169.0/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three@0.169.0/examples/jsm/"
+  }
+}
+</script>
+</head>
+<body>
+<div id="hud">
+  <h1>Arrakis: the north polar region</h1>
+  <p>Terrain for the setting of Dune, Part One: the Shield Wall ring, Arrakeen inside it, and Carthag to the north-east.
+     Locations are schematic. The tile is 320 km across; heights are exaggerated 6x.</p>
+</div>
+<div id="controls">
+  <label><input type="checkbox" id="spin"> Auto-rotate</label>
+  <label><input type="checkbox" id="labels" checked> Labels</label>
+</div>
+<div id="tags"></div>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+
+const GLB_BASE64 = '__GLB_BASE64__';
+const MARKERS = __MARKERS__;
+
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setSize(window.innerWidth, window.innerHeight);
+document.body.prepend(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x1d1410);
+scene.fog = new THREE.Fog(0x1d1410, 420, 1100);
+
+const camera = new THREE.PerspectiveCamera(42, window.innerWidth / window.innerHeight, 0.5, 4000);
+camera.position.set(240, 200, 300);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.target.set(0, 6, 0);
+controls.enableDamping = true;
+controls.maxPolarAngle = Math.PI * 0.49;
+controls.minDistance = 60;
+controls.maxDistance = 900;
+controls.autoRotateSpeed = 0.6;
+
+scene.add(new THREE.HemisphereLight(0xfff0d8, 0x3b2619, 1.2));
+const sun = new THREE.DirectionalLight(0xffd9a0, 2.4);
+sun.position.set(-260, 110, -140); // low, raking light so the dunes and the wall show relief
+scene.add(sun);
+
+const bytes = Uint8Array.from(atob(GLB_BASE64), c => c.charCodeAt(0));
+new GLTFLoader().parse(bytes.buffer, '', gltf => scene.add(gltf.scene), err => console.error(err));
+
+const tagLayer = document.getElementById('tags');
+const labelToggle = document.getElementById('labels');
+const anchors = MARKERS.map(m => {
+  const pillar = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.7, 0.7, 12, 10),
+    new THREE.MeshBasicMaterial({ color: m.color })
+  );
+  pillar.position.set(m.x, m.y + 6, m.z);
+  scene.add(pillar);
+
+  const el = document.createElement('div');
+  el.className = 'tag';
+  const title = document.createElement('strong');
+  title.textContent = m.name;
+  const note = document.createElement('small');
+  note.textContent = m.desc;
+  el.append(title, note);
+  el.style.borderColor = m.color;
+  tagLayer.append(el);
+
+  return { el, point: new THREE.Vector3(m.x, m.y + 13, m.z) };
+});
+
+const projected = new THREE.Vector3();
+function placeTags() {
+  const showLabels = labelToggle.checked;
+  for (const { el, point } of anchors) {
+    projected.copy(point).project(camera);
+    el.classList.toggle('off', !showLabels || projected.z > 1);
+    el.style.left = `${(projected.x + 1) / 2 * window.innerWidth}px`;
+    el.style.top = `${(1 - projected.y) / 2 * window.innerHeight}px`;
+  }
+}
+
+document.getElementById('spin').addEventListener('change', e => {
+  controls.autoRotate = e.target.checked;
+});
+
+window.addEventListener('resize', () => {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+});
+
+function animate() {
+  requestAnimationFrame(animate);
+  controls.update();
+  renderer.render(scene, camera);
+  placeTags();
+}
+animate();
+</script>
+</body>
+</html>
